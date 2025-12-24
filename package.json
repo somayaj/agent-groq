@@ -2,8 +2,14 @@
   "name": "agent-groq",
   "version": "1.0.0",
   "type": "module",
-  "description": "LangChain Agent powered by Groq",
+  "description": "LangChain-powered AI agent using Groq for fast, free inference. Features custom tool creation, AI code generation, and beautiful web interface.",
   "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./agent": "./src/agent.js",
+    "./tools": "./src/tools/index.js",
+    "./server": "./src/server.js"
+  },
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
@@ -15,10 +21,32 @@
     "groq",
     "agent",
     "ai",
-    "llm"
+    "llm",
+    "chatbot",
+    "tools",
+    "llama",
+    "react-agent",
+    "artificial-intelligence"
   ],
   "author": "Asha Somayajula",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/somayaj/agent-groq.git"
+  },
+  "bugs": {
+    "url": "https://github.com/somayaj/agent-groq/issues"
+  },
+  "homepage": "https://github.com/somayaj/agent-groq#readme",
+  "files": [
+    "src/",
+    "public/",
+    "LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "dependencies": {
     "@langchain/core": "^0.3.0",
     "@langchain/groq": "^0.1.0",
@@ -29,4 +57,3 @@
     "zod": "^3.23.0"
   }
 }
-
