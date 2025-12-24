@@ -34,7 +34,7 @@ This package is a **"batteries-included" wrapper** around LangChain that simplif
 **Using Agent Groq (Simplified):**
 
 ```javascript
-import { Agent } from "./src/agent.js";
+import { Agent } from "agent-groq";
 
 const agent = new Agent();
 const result = await agent.chat("What is 25 * 48?");
@@ -286,7 +286,11 @@ Custom tool code is validated and sandboxed to prevent malicious operations:
 ### Basic Usage
 
 ```javascript
-import { Agent } from "./src/agent.js";
+// If installed from npm:
+import { Agent } from "agent-groq";
+
+// If using locally:
+// import { Agent } from "./src/agent.js";
 
 // Uses fastest model by default
 const agent = new Agent();
@@ -310,12 +314,12 @@ for await (const chunk of agent.stream("Tell me a joke")) {
 }
 ```
 
-### Custom Tools
+### Custom Tools (Programmatic)
 
 ```javascript
+import { Agent } from "agent-groq";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
-import { Agent } from "./src/agent.js";
 
 const myTool = tool(
   async ({ input }) => {
@@ -371,7 +375,7 @@ const agent = new Agent({
 
 MIT License
 
-Copyright (c) 2024 Asha Somayajula
+Copyright (c) 2025 Asha Somayajula
 
 See [LICENSE](LICENSE) for details.
 

@@ -1,14 +1,22 @@
 {
   "name": "agent-groq",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "description": "LangChain-powered AI agent using Groq for fast, free inference. Features custom tool creation, AI code generation, and beautiful web interface.",
-  "main": "src/index.js",
+  "main": "src/agent.js",
   "exports": {
-    ".": "./src/index.js",
-    "./agent": "./src/agent.js",
-    "./tools": "./src/tools/index.js",
-    "./server": "./src/server.js"
+    ".": {
+      "import": "./src/agent.js",
+      "default": "./src/agent.js"
+    },
+    "./tools": {
+      "import": "./src/tools/index.js",
+      "default": "./src/tools/index.js"
+    },
+    "./server": {
+      "import": "./src/server.js",
+      "default": "./src/server.js"
+    }
   },
   "scripts": {
     "start": "node src/index.js",
