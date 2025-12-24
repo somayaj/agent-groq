@@ -1,0 +1,1089 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent Groq - AI Agent Interface</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Outfit', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            groq: {
+              50: '#fef4e6',
+              100: '#fde5c3',
+              200: '#fbd49d',
+              300: '#f9c176',
+              400: '#f7a94f',
+              500: '#f59023',
+              600: '#e07608',
+              700: '#b85d06',
+              800: '#8f4805',
+              900: '#6b3604',
+            },
+            dark: {
+              50: '#f7f7f8',
+              100: '#ececf1',
+              200: '#d9d9e3',
+              300: '#c5c5d2',
+              400: '#acacbe',
+              500: '#8e8ea0',
+              600: '#565869',
+              700: '#40414f',
+              800: '#343541',
+              900: '#202123',
+              950: '#0d0d0f',
+            }
+          },
+        }
+      }
+    }
+  </script>
+  <style>
+    .gradient-border {
+      background: linear-gradient(135deg, #f59023, #f7a94f, #fbd49d);
+      padding: 2px;
+      border-radius: 1rem;
+    }
+    .gradient-border > div {
+      background: #202123;
+      border-radius: calc(1rem - 2px);
+    }
+    .tool-badge {
+      background: linear-gradient(135deg, rgba(245, 144, 35, 0.2), rgba(245, 144, 35, 0.1));
+      border: 1px solid rgba(245, 144, 35, 0.3);
+    }
+    .custom-tool-badge {
+      background: linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(34, 197, 94, 0.1));
+      border: 1px solid rgba(34, 197, 94, 0.3);
+    }
+    .message-enter {
+      animation: messageEnter 0.3s ease-out;
+    }
+    @keyframes messageEnter {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .typing-indicator span {
+      animation: typing 1.4s infinite;
+    }
+    .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+    .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes typing {
+      0%, 60%, 100% { transform: translateY(0); }
+      30% { transform: translateY(-4px); }
+    }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #202123; }
+    ::-webkit-scrollbar-thumb { background: #565869; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #8e8ea0; }
+    .modal-backdrop {
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+    }
+  </style>
+</head>
+<body class="bg-dark-950 text-dark-100 font-sans min-h-screen">
+  <div class="flex h-screen">
+    <!-- Sidebar -->
+    <aside class="w-80 bg-dark-900 border-r border-dark-700 flex flex-col">
+      <!-- Logo -->
+      <div class="p-6 border-b border-dark-700">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-groq-500 to-groq-600 flex items-center justify-center">
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+            </svg>
+          </div>
+          <div>
+            <h1 class="text-xl font-bold text-white">Agent Groq</h1>
+            <p class="text-xs text-dark-400">Powered by LangChain</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scrollable Content -->
+      <div class="flex-1 overflow-y-auto p-4">
+        <!-- Configuration -->
+        <h2 class="text-xs font-semibold text-dark-400 uppercase tracking-wider mb-4">Configuration</h2>
+        
+        <!-- Model Selection -->
+        <div class="mb-5">
+          <label class="block text-sm font-medium text-dark-200 mb-2">Model</label>
+          <select id="modelSelect" class="w-full bg-dark-800 border border-dark-600 rounded-lg px-3 py-2.5 text-sm text-white focus:ring-2 focus:ring-groq-500 focus:border-transparent transition-all">
+            <option value="llama-3.1-8b-instant" selected>Llama 3.1 8B ⚡ Fastest</option>
+            <option value="llama-3.3-70b-versatile">Llama 3.3 70B 🧠 Smartest</option>
+            <option value="llama-3.1-70b-versatile">Llama 3.1 70B</option>
+            <option value="mixtral-8x7b-32768">Mixtral 8x7B</option>
+            <option value="gemma2-9b-it">Gemma 2 9B</option>
+          </select>
+        </div>
+
+        <!-- Temperature -->
+        <div class="mb-6">
+          <label class="block text-sm font-medium text-dark-200 mb-2">
+            Temperature: <span id="tempValue" class="text-groq-400">0.7</span>
+          </label>
+          <input type="range" id="temperature" min="0" max="1" step="0.1" value="0.7" 
+            class="w-full h-2 bg-dark-700 rounded-lg appearance-none cursor-pointer accent-groq-500">
+          <div class="flex justify-between text-xs text-dark-500 mt-1">
+            <span>Precise</span>
+            <span>Creative</span>
+          </div>
+        </div>
+
+        <!-- Built-in Tools -->
+        <div class="mb-6">
+          <h3 class="text-sm font-medium text-dark-200 mb-3 flex items-center gap-2">
+            <svg class="w-4 h-4 text-groq-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+            Built-in Tools
+          </h3>
+          <div id="builtInToolsList" class="space-y-2">
+            <!-- Tools loaded dynamically -->
+          </div>
+        </div>
+
+        <!-- Custom Tools -->
+        <div class="mb-6">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-medium text-dark-200 flex items-center gap-2">
+              <svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+              </svg>
+              Custom Tools
+            </h3>
+            <button id="addToolBtn" class="text-xs bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded-md transition-all flex items-center gap-1">
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+              </svg>
+              Add Tool
+            </button>
+          </div>
+          <div id="customToolsList" class="space-y-2">
+            <p class="text-xs text-dark-500 italic">No custom tools yet</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Status & Actions -->
+      <div class="p-4 border-t border-dark-700">
+        <div id="statusIndicator" class="flex items-center gap-2 mb-4">
+          <div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+          <span class="text-sm text-dark-300">Connected</span>
+        </div>
+        <button id="clearChat" class="w-full py-2.5 px-4 bg-dark-800 hover:bg-dark-700 border border-dark-600 rounded-lg text-sm font-medium text-dark-200 transition-all flex items-center justify-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+          </svg>
+          Clear Conversation
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Chat Area -->
+    <main class="flex-1 flex flex-col">
+      <!-- Chat Messages -->
+      <div id="chatMessages" class="flex-1 overflow-y-auto p-6 space-y-6">
+        <!-- Welcome Message -->
+        <div class="max-w-3xl mx-auto text-center py-12">
+          <div class="w-20 h-20 rounded-2xl bg-gradient-to-br from-groq-500 to-groq-600 flex items-center justify-center mx-auto mb-6 shadow-lg shadow-groq-500/20">
+            <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+            </svg>
+          </div>
+          <h2 class="text-3xl font-bold text-white mb-3">Welcome to Agent Groq</h2>
+          <p class="text-dark-400 mb-8 max-w-md mx-auto">
+            A lightning-fast AI agent powered by Groq and LangChain. Try asking me to calculate something, check the time, or manipulate text!
+          </p>
+          <div class="flex flex-wrap justify-center gap-3">
+            <button onclick="sendSuggestion('What is 1337 * 42 + 999?')" class="px-4 py-2 bg-dark-800 hover:bg-dark-700 border border-dark-600 rounded-full text-sm text-dark-200 transition-all">
+              🧮 Calculate 1337 × 42 + 999
+            </button>
+            <button onclick="sendSuggestion('What time is it in Tokyo?')" class="px-4 py-2 bg-dark-800 hover:bg-dark-700 border border-dark-600 rounded-full text-sm text-dark-200 transition-all">
+              🕐 Time in Tokyo
+            </button>
+            <button onclick="sendSuggestion('Reverse the text: Hello World')" class="px-4 py-2 bg-dark-800 hover:bg-dark-700 border border-dark-600 rounded-full text-sm text-dark-200 transition-all">
+              🔄 Reverse text
+            </button>
+            <button onclick="sendSuggestion('Generate a random number between 1 and 1000000')" class="px-4 py-2 bg-dark-800 hover:bg-dark-700 border border-dark-600 rounded-full text-sm text-dark-200 transition-all">
+              🎲 Random number
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Input Area -->
+      <div class="border-t border-dark-700 p-4 bg-dark-900/50 backdrop-blur">
+        <div class="max-w-3xl mx-auto">
+          <form id="chatForm" class="relative">
+            <div class="gradient-border">
+              <div class="flex items-end gap-3 p-2">
+                <textarea 
+                  id="messageInput" 
+                  placeholder="Ask the agent anything..." 
+                  rows="1"
+                  class="flex-1 bg-transparent border-0 text-white placeholder-dark-500 resize-none focus:ring-0 focus:outline-none py-2 px-2 max-h-32"
+                ></textarea>
+                <button 
+                  type="submit" 
+                  id="sendButton"
+                  class="p-3 bg-gradient-to-r from-groq-500 to-groq-600 hover:from-groq-600 hover:to-groq-700 rounded-xl text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+                >
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </form>
+          <p class="text-xs text-dark-500 mt-2 text-center">
+            Powered by Groq's ultra-fast inference • Press Enter to send
+          </p>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Add Custom Tool Modal -->
+  <div id="toolModal" class="fixed inset-0 z-50 hidden">
+    <div class="modal-backdrop absolute inset-0" onclick="closeToolModal()"></div>
+    <div class="absolute inset-0 flex items-center justify-center p-4">
+      <div class="bg-dark-900 border border-dark-700 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl relative">
+        <!-- Modal Header -->
+        <div class="px-6 py-4 border-b border-dark-700 flex items-center justify-between">
+          <h2 id="modalTitle" class="text-xl font-bold text-white flex items-center gap-2">
+            <svg id="modalIcon" class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+            </svg>
+            <span id="modalTitleText">Create Custom Tool</span>
+          </h2>
+          <button onclick="closeToolModal()" class="text-dark-400 hover:text-white transition-colors">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Modal Body -->
+        <div class="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
+          <form id="toolForm" class="space-y-5">
+            <!-- Tool Name -->
+            <div>
+              <label class="block text-sm font-medium text-dark-200 mb-2">Tool Name</label>
+              <input 
+                type="text" 
+                id="toolName" 
+                placeholder="my_custom_tool"
+                pattern="[a-z_][a-z0-9_]*"
+                class="w-full bg-dark-800 border border-dark-600 rounded-lg px-4 py-3 text-white placeholder-dark-500 focus:ring-2 focus:ring-green-500 focus:border-transparent font-mono text-sm"
+                required
+              >
+              <p class="text-xs text-dark-500 mt-1">Lowercase letters and underscores only (e.g., fetch_weather)</p>
+            </div>
+
+            <!-- Description -->
+            <div>
+              <label class="block text-sm font-medium text-dark-200 mb-2">Description</label>
+              <input 
+                type="text" 
+                id="toolDescription" 
+                placeholder="Describe what this tool does..."
+                class="w-full bg-dark-800 border border-dark-600 rounded-lg px-4 py-3 text-white placeholder-dark-500 focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
+                required
+              >
+              <p class="text-xs text-dark-500 mt-1">The AI uses this to decide when to call your tool</p>
+            </div>
+
+            <!-- Parameters -->
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <label class="block text-sm font-medium text-dark-200">Parameters</label>
+                <button type="button" onclick="addParameter()" class="text-xs bg-dark-700 hover:bg-dark-600 text-dark-200 px-2 py-1 rounded transition-all">
+                  + Add Parameter
+                </button>
+              </div>
+              <div id="parametersContainer" class="space-y-3">
+                <!-- Parameters added dynamically -->
+              </div>
+              <p class="text-xs text-dark-500 mt-2">Parameters your tool accepts (available as variables in code)</p>
+            </div>
+
+            <!-- Code -->
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <label class="block text-sm font-medium text-dark-200">JavaScript Code</label>
+                <button 
+                  type="button" 
+                  onclick="generateCode()" 
+                  id="generateCodeBtn"
+                  class="text-xs bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                  </svg>
+                  <span id="generateBtnText">Generate with AI</span>
+                </button>
+              </div>
+              <textarea 
+                id="toolCode" 
+                rows="8"
+                placeholder="// Your code here. Parameters are available as variables.
+// Example:
+return `Hello, ${name}! You are ${age} years old.`;
+
+// Or click 'Generate with AI' to auto-generate code from your name & description!"
+                class="w-full bg-dark-800 border border-dark-600 rounded-lg px-4 py-3 text-white placeholder-dark-500 focus:ring-2 focus:ring-green-500 focus:border-transparent font-mono text-sm resize-none"
+                required
+              ></textarea>
+              <div class="flex items-center justify-between mt-1">
+                <p class="text-xs text-dark-500">Return a string result. Async/await is supported.</p>
+                <button type="button" onclick="validateToolCode()" class="text-xs text-dark-400 hover:text-dark-200 flex items-center gap-1">
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                  </svg>
+                  Check Security
+                </button>
+              </div>
+              <div id="securityWarning" class="hidden mt-2 bg-yellow-900/20 border border-yellow-700 rounded-lg px-3 py-2 text-yellow-400 text-xs">
+                <div class="flex items-center gap-2 font-medium mb-1">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                  </svg>
+                  <span>Security Warning</span>
+                </div>
+                <ul id="securityWarningList" class="list-disc list-inside space-y-0.5"></ul>
+              </div>
+              <div id="securityOk" class="hidden mt-2 bg-green-900/20 border border-green-700 rounded-lg px-3 py-2 text-green-400 text-xs flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                </svg>
+                Code passed security checks
+              </div>
+            </div>
+
+            <!-- Example Templates -->
+            <div>
+              <label class="block text-sm font-medium text-dark-200 mb-2">Quick Templates</label>
+              <div class="flex flex-wrap gap-2">
+                <button type="button" onclick="loadTemplate('greeting')" class="text-xs bg-dark-700 hover:bg-dark-600 text-dark-300 px-3 py-1.5 rounded-full transition-all">
+                  👋 Greeting
+                </button>
+                <button type="button" onclick="loadTemplate('dice')" class="text-xs bg-dark-700 hover:bg-dark-600 text-dark-300 px-3 py-1.5 rounded-full transition-all">
+                  🎲 Dice Roll
+                </button>
+                <button type="button" onclick="loadTemplate('counter')" class="text-xs bg-dark-700 hover:bg-dark-600 text-dark-300 px-3 py-1.5 rounded-full transition-all">
+                  🔢 Counter
+                </button>
+                <button type="button" onclick="loadTemplate('uuid')" class="text-xs bg-dark-700 hover:bg-dark-600 text-dark-300 px-3 py-1.5 rounded-full transition-all">
+                  🆔 UUID Generator
+                </button>
+                <button type="button" onclick="loadTemplate('transformer')" class="text-xs bg-purple-700 hover:bg-purple-600 text-purple-100 px-3 py-1.5 rounded-full transition-all">
+                  ⚡ Transformer (Code)
+                </button>
+                <button type="button" onclick="loadTemplate('array_processor')" class="text-xs bg-purple-700 hover:bg-purple-600 text-purple-100 px-3 py-1.5 rounded-full transition-all">
+                  📊 Array Processor
+                </button>
+              </div>
+            </div>
+
+            <!-- Error Message -->
+            <div id="toolError" class="hidden bg-red-900/20 border border-red-800 rounded-lg px-4 py-3 text-red-400 text-sm"></div>
+          </form>
+        </div>
+
+        <!-- Modal Footer -->
+        <div class="px-6 py-4 border-t border-dark-700 flex justify-end gap-3">
+          <button onclick="closeToolModal()" class="px-4 py-2 bg-dark-700 hover:bg-dark-600 text-dark-200 rounded-lg transition-all">
+            Cancel
+          </button>
+          <button onclick="saveTool()" id="saveToolBtn" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-all flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+            </svg>
+            <span id="saveToolBtnText">Create Tool</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // State
+    let isLoading = false;
+    const sessionId = 'session_' + Math.random().toString(36).substr(2, 9);
+    let parameterCount = 0;
+    let editingToolName = null; // Track which tool we're editing (null = creating new)
+
+    // Elements
+    const chatMessages = document.getElementById('chatMessages');
+    const chatForm = document.getElementById('chatForm');
+    const messageInput = document.getElementById('messageInput');
+    const sendButton = document.getElementById('sendButton');
+    const modelSelect = document.getElementById('modelSelect');
+    const temperature = document.getElementById('temperature');
+    const tempValue = document.getElementById('tempValue');
+    const clearChat = document.getElementById('clearChat');
+    const builtInToolsList = document.getElementById('builtInToolsList');
+    const customToolsList = document.getElementById('customToolsList');
+    const statusIndicator = document.getElementById('statusIndicator');
+    const toolModal = document.getElementById('toolModal');
+    const addToolBtn = document.getElementById('addToolBtn');
+
+    // Initialize
+    async function init() {
+      await checkHealth();
+      await loadTools();
+      
+      messageInput.addEventListener('input', () => {
+        messageInput.style.height = 'auto';
+        messageInput.style.height = Math.min(messageInput.scrollHeight, 128) + 'px';
+      });
+
+      messageInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          chatForm.dispatchEvent(new Event('submit'));
+        }
+      });
+
+      addToolBtn.addEventListener('click', openToolModal);
+    }
+
+    // Check API health
+    async function checkHealth() {
+      try {
+        const res = await fetch('/api/health');
+        const data = await res.json();
+        if (!data.apiKeySet) {
+          updateStatus('error', 'API Key Missing');
+        }
+      } catch (error) {
+        updateStatus('error', 'Server Offline');
+      }
+    }
+
+    // Load available tools
+    async function loadTools() {
+      try {
+        const res = await fetch(`/api/tools?sessionId=${sessionId}`);
+        const data = await res.json();
+        
+        // Built-in tools
+        builtInToolsList.innerHTML = data.builtIn.map(tool => `
+          <div class="tool-badge rounded-lg px-3 py-2">
+            <div class="text-sm font-medium text-groq-400">${tool.name}</div>
+            <div class="text-xs text-dark-400 mt-0.5 truncate">${tool.description.slice(0, 40)}...</div>
+          </div>
+        `).join('');
+
+        // Custom tools
+        if (data.custom && data.custom.length > 0) {
+          // Store custom tools for editing
+          window.customToolsData = data.custom;
+          
+          customToolsList.innerHTML = data.custom.map(tool => `
+            <div class="custom-tool-badge rounded-lg px-3 py-2 group relative">
+              <div class="flex items-center justify-between">
+                <div class="text-sm font-medium text-green-400 truncate flex-1">${tool.name}</div>
+                <div class="flex items-center gap-0.5 ml-2">
+                  <button onclick="editTool('${tool.name}')" class="text-blue-400/60 hover:text-blue-300 p-1.5 hover:bg-blue-500/10 rounded transition-all" title="Edit tool">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                    </svg>
+                  </button>
+                  <button onclick="deleteTool('${tool.name}')" class="text-red-400/60 hover:text-red-300 p-1.5 hover:bg-red-500/10 rounded transition-all" title="Delete tool">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <div class="text-xs text-dark-400 mt-0.5 truncate">${tool.description.slice(0, 40)}...</div>
+            </div>
+          `).join('');
+        } else {
+          window.customToolsData = [];
+          customToolsList.innerHTML = '<p class="text-xs text-dark-500 italic">No custom tools yet</p>';
+        }
+      } catch (error) {
+        console.error('Failed to load tools:', error);
+      }
+    }
+
+    // Update status indicator
+    function updateStatus(status, text) {
+      const colors = { connected: 'bg-green-500', loading: 'bg-yellow-500', error: 'bg-red-500' };
+      statusIndicator.innerHTML = `
+        <div class="w-2 h-2 rounded-full ${colors[status]} ${status === 'loading' ? 'animate-pulse' : ''}"></div>
+        <span class="text-sm text-dark-300">${text}</span>
+      `;
+    }
+
+    temperature.addEventListener('input', () => {
+      tempValue.textContent = temperature.value;
+    });
+
+    // Chat form submission
+    chatForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const message = messageInput.value.trim();
+      if (!message || isLoading) return;
+
+      const welcome = chatMessages.querySelector('.text-center');
+      if (welcome) welcome.remove();
+
+      addMessage('user', message);
+      messageInput.value = '';
+      messageInput.style.height = 'auto';
+
+      isLoading = true;
+      sendButton.disabled = true;
+      updateStatus('loading', 'Thinking...');
+      const loadingId = addLoadingMessage();
+
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message,
+            sessionId,
+            config: {
+              model: modelSelect.value,
+              temperature: parseFloat(temperature.value)
+            }
+          })
+        });
+
+        const data = await res.json();
+        removeLoadingMessage(loadingId);
+
+        if (data.error) {
+          addMessage('error', data.error);
+        } else {
+          addMessage('assistant', data.response, {
+            toolCalls: data.toolCalls,
+            toolResults: data.toolResults,
+            duration: data.duration,
+            model: data.model
+          });
+        }
+      } catch (error) {
+        removeLoadingMessage(loadingId);
+        addMessage('error', 'Failed to connect to server');
+      }
+
+      isLoading = false;
+      sendButton.disabled = false;
+      updateStatus('connected', 'Connected');
+    });
+
+    // Add message to chat
+    function addMessage(type, content, meta = {}) {
+      const div = document.createElement('div');
+      div.className = 'message-enter max-w-3xl mx-auto';
+
+      if (type === 'user') {
+        div.innerHTML = `
+          <div class="flex justify-end">
+            <div class="bg-groq-600 rounded-2xl rounded-tr-sm px-4 py-3 max-w-[80%]">
+              <p class="text-white">${escapeHtml(content)}</p>
+            </div>
+          </div>
+        `;
+      } else if (type === 'assistant') {
+        let toolsHtml = '';
+        if (meta.toolCalls && meta.toolCalls.length > 0) {
+          toolsHtml = `
+            <div class="mb-3 space-y-2">
+              ${meta.toolCalls.map((tc, i) => `
+                <div class="tool-badge rounded-lg px-3 py-2">
+                  <div class="flex items-center gap-2 text-sm">
+                    <svg class="w-4 h-4 text-groq-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                    <span class="font-medium text-groq-400">${tc.name}</span>
+                    <span class="text-dark-400">→</span>
+                    <code class="text-xs bg-dark-800 px-2 py-0.5 rounded text-dark-300">${JSON.stringify(tc.args)}</code>
+                  </div>
+                  ${meta.toolResults && meta.toolResults[i] ? `
+                    <div class="mt-2 text-xs text-dark-300 font-mono bg-dark-800 rounded px-2 py-1">
+                      ${escapeHtml(meta.toolResults[i].result)}
+                    </div>
+                  ` : ''}
+                </div>
+              `).join('')}
+            </div>
+          `;
+        }
+
+        div.innerHTML = `
+          <div class="flex gap-4">
+            <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-groq-500 to-groq-600 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+              </svg>
+            </div>
+            <div class="flex-1 min-w-0">
+              ${toolsHtml}
+              <div class="prose prose-invert max-w-none">
+                <p class="text-dark-100 whitespace-pre-wrap">${escapeHtml(content)}</p>
+              </div>
+              <div class="flex items-center gap-3 mt-3 text-xs text-dark-500">
+                <span>${meta.model || 'llama-3.3-70b'}</span>
+                <span>•</span>
+                <span>${meta.duration ? (meta.duration / 1000).toFixed(2) + 's' : ''}</span>
+              </div>
+            </div>
+          </div>
+        `;
+      } else if (type === 'error') {
+        div.innerHTML = `
+          <div class="bg-red-900/20 border border-red-800 rounded-xl px-4 py-3">
+            <div class="flex items-center gap-2 text-red-400">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+              <span>${escapeHtml(content)}</span>
+            </div>
+          </div>
+        `;
+      }
+
+      chatMessages.appendChild(div);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function addLoadingMessage() {
+      const id = 'loading_' + Date.now();
+      const div = document.createElement('div');
+      div.id = id;
+      div.className = 'message-enter max-w-3xl mx-auto';
+      div.innerHTML = `
+        <div class="flex gap-4">
+          <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-groq-500 to-groq-600 flex items-center justify-center flex-shrink-0 animate-pulse">
+            <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+            </svg>
+          </div>
+          <div class="flex items-center gap-1 typing-indicator">
+            <span class="w-2 h-2 bg-dark-400 rounded-full"></span>
+            <span class="w-2 h-2 bg-dark-400 rounded-full"></span>
+            <span class="w-2 h-2 bg-dark-400 rounded-full"></span>
+          </div>
+        </div>
+      `;
+      chatMessages.appendChild(div);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+      return id;
+    }
+
+    function removeLoadingMessage(id) {
+      const el = document.getElementById(id);
+      if (el) el.remove();
+    }
+
+    // Clear chat
+    clearChat.addEventListener('click', async () => {
+      await fetch('/api/clear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId })
+      });
+      location.reload();
+    });
+
+    function sendSuggestion(text) {
+      messageInput.value = text;
+      chatForm.dispatchEvent(new Event('submit'));
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Tool Modal Functions
+    function openToolModal(isEdit = false, toolData = null) {
+      toolModal.classList.remove('hidden');
+      editingToolName = isEdit && toolData ? toolData.name : null;
+      
+      // Update modal UI based on mode
+      const modalTitleText = document.getElementById('modalTitleText');
+      const modalIcon = document.getElementById('modalIcon');
+      const saveToolBtnText = document.getElementById('saveToolBtnText');
+      
+      if (isEdit && toolData) {
+        modalTitleText.textContent = 'Edit Custom Tool';
+        modalIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>';
+        modalIcon.classList.remove('text-green-400');
+        modalIcon.classList.add('text-blue-400');
+        saveToolBtnText.textContent = 'Update Tool';
+        
+        // Populate form with existing data
+        document.getElementById('toolName').value = toolData.name;
+        document.getElementById('toolDescription').value = toolData.description;
+        document.getElementById('toolCode').value = toolData.code || '';
+        
+        // Populate parameters
+        document.getElementById('parametersContainer').innerHTML = '';
+        parameterCount = 0;
+        if (toolData.parameters && toolData.parameters.length > 0) {
+          toolData.parameters.forEach(p => {
+            addParameter();
+            const lastParam = document.getElementById(`param_${parameterCount}`);
+            lastParam.querySelector('[data-param-name]').value = p.name;
+            lastParam.querySelector('[data-param-type]').value = p.type || 'string';
+            lastParam.querySelector('[data-param-desc]').value = p.description || '';
+            lastParam.querySelector('[data-param-required]').checked = p.required !== false;
+          });
+        }
+      } else {
+        modalTitleText.textContent = 'Create Custom Tool';
+        modalIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>';
+        modalIcon.classList.remove('text-blue-400');
+        modalIcon.classList.add('text-green-400');
+        saveToolBtnText.textContent = 'Create Tool';
+        
+        // Clear form
+        document.getElementById('toolName').value = '';
+        document.getElementById('toolDescription').value = '';
+        document.getElementById('toolCode').value = '';
+        document.getElementById('parametersContainer').innerHTML = '';
+        parameterCount = 0;
+      }
+      
+      document.getElementById('toolError').classList.add('hidden');
+    }
+    
+    function editTool(toolName) {
+      const toolData = window.customToolsData?.find(t => t.name === toolName);
+      if (toolData) {
+        openToolModal(true, toolData);
+      }
+    }
+
+    function closeToolModal() {
+      toolModal.classList.add('hidden');
+    }
+
+    function addParameter() {
+      parameterCount++;
+      const container = document.getElementById('parametersContainer');
+      const paramDiv = document.createElement('div');
+      paramDiv.className = 'flex gap-2 items-start';
+      paramDiv.id = `param_${parameterCount}`;
+      paramDiv.innerHTML = `
+        <input type="text" placeholder="name" class="flex-1 bg-dark-800 border border-dark-600 rounded-lg px-3 py-2 text-white placeholder-dark-500 text-sm font-mono" data-param-name>
+        <select class="bg-dark-800 border border-dark-600 rounded-lg px-3 py-2 text-white text-sm" data-param-type>
+          <option value="string">String</option>
+          <option value="number">Number</option>
+          <option value="boolean">Boolean</option>
+          <option value="array">Array</option>
+          <option value="object">Object</option>
+          <option value="code">Code (JS)</option>
+        </select>
+        <input type="text" placeholder="description" class="flex-1 bg-dark-800 border border-dark-600 rounded-lg px-3 py-2 text-white placeholder-dark-500 text-sm" data-param-desc>
+        <label class="flex items-center gap-1 text-xs text-dark-400">
+          <input type="checkbox" checked data-param-required class="rounded bg-dark-700 border-dark-600">
+          Req
+        </label>
+        <button type="button" onclick="removeParameter(${parameterCount})" class="text-red-400 hover:text-red-300 p-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      `;
+      container.appendChild(paramDiv);
+    }
+
+    function removeParameter(id) {
+      document.getElementById(`param_${id}`)?.remove();
+    }
+
+    function getParameters() {
+      const params = [];
+      document.querySelectorAll('#parametersContainer > div').forEach(div => {
+        const name = div.querySelector('[data-param-name]')?.value?.trim();
+        const type = div.querySelector('[data-param-type]')?.value;
+        const description = div.querySelector('[data-param-desc]')?.value?.trim();
+        const required = div.querySelector('[data-param-required]')?.checked;
+        if (name) {
+          params.push({ name, type, description, required });
+        }
+      });
+      return params;
+    }
+
+    async function validateToolCode() {
+      const code = document.getElementById('toolCode').value.trim();
+      const warningDiv = document.getElementById('securityWarning');
+      const warningList = document.getElementById('securityWarningList');
+      const okDiv = document.getElementById('securityOk');
+
+      if (!code) {
+        warningDiv.classList.add('hidden');
+        okDiv.classList.add('hidden');
+        return { isValid: true };
+      }
+
+      try {
+        const res = await fetch('/api/tools/validate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code })
+        });
+        const data = await res.json();
+
+        if (data.isValid) {
+          warningDiv.classList.add('hidden');
+          okDiv.classList.remove('hidden');
+        } else {
+          okDiv.classList.add('hidden');
+          warningDiv.classList.remove('hidden');
+          warningList.innerHTML = data.errors.map(e => `<li>${e}</li>`).join('');
+        }
+
+        return data;
+      } catch (error) {
+        return { isValid: false, errors: ['Failed to validate code'] };
+      }
+    }
+
+    async function generateCode() {
+      const name = document.getElementById('toolName').value.trim();
+      const description = document.getElementById('toolDescription').value.trim();
+      const parameters = getParameters();
+      const errorDiv = document.getElementById('toolError');
+      const btn = document.getElementById('generateCodeBtn');
+      const btnText = document.getElementById('generateBtnText');
+
+      if (!name || !description) {
+        errorDiv.textContent = 'Please fill in the tool name and description first';
+        errorDiv.classList.remove('hidden');
+        return;
+      }
+
+      // Show loading state
+      btn.disabled = true;
+      btnText.innerHTML = '<span class="inline-block animate-spin">⚡</span> Generating...';
+      errorDiv.classList.add('hidden');
+
+      try {
+        const res = await fetch('/api/tools/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, description, parameters })
+        });
+
+        const data = await res.json();
+        
+        if (data.error) {
+          errorDiv.textContent = data.error;
+          errorDiv.classList.remove('hidden');
+        } else {
+          document.getElementById('toolCode').value = data.code;
+        }
+      } catch (error) {
+        errorDiv.textContent = 'Failed to generate code';
+        errorDiv.classList.remove('hidden');
+      }
+
+      // Reset button
+      btn.disabled = false;
+      btnText.innerHTML = 'Generate with AI';
+    }
+
+    async function saveTool() {
+      const name = document.getElementById('toolName').value.trim();
+      const description = document.getElementById('toolDescription').value.trim();
+      const code = document.getElementById('toolCode').value.trim();
+      const parameters = getParameters();
+      const errorDiv = document.getElementById('toolError');
+
+      if (!name || !description || !code) {
+        errorDiv.textContent = 'Please fill in all required fields';
+        errorDiv.classList.remove('hidden');
+        return;
+      }
+
+      // Validate code security before saving
+      const validation = await validateToolCode();
+      if (!validation.isValid) {
+        errorDiv.textContent = `Security issue: ${validation.errors.join(', ')}`;
+        errorDiv.classList.remove('hidden');
+        return;
+      }
+
+      try {
+        let res;
+        if (editingToolName) {
+          // Update existing tool
+          res = await fetch(`/api/tools/${editingToolName}?sessionId=${sessionId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId, name, description, parameters, code })
+          });
+        } else {
+          // Create new tool
+          res = await fetch('/api/tools', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId, name, description, parameters, code })
+          });
+        }
+
+        const data = await res.json();
+        if (data.error) {
+          errorDiv.textContent = data.error;
+          errorDiv.classList.remove('hidden');
+          return;
+        }
+
+        closeToolModal();
+        await loadTools();
+      } catch (error) {
+        errorDiv.textContent = editingToolName ? 'Failed to update tool' : 'Failed to create tool';
+        errorDiv.classList.remove('hidden');
+      }
+    }
+
+    async function deleteTool(name) {
+      if (!confirm(`Delete tool "${name}"?`)) return;
+      
+      try {
+        await fetch(`/api/tools/${name}?sessionId=${sessionId}`, { method: 'DELETE' });
+        await loadTools();
+      } catch (error) {
+        console.error('Failed to delete tool:', error);
+      }
+    }
+
+    // Templates
+    const templates = {
+      greeting: {
+        name: 'greet_user',
+        description: 'Greets a user by name with a custom message',
+        parameters: [
+          { name: 'name', type: 'string', description: 'The name to greet', required: true },
+          { name: 'greeting', type: 'string', description: 'Custom greeting word', required: false }
+        ],
+        code: `const greet = greeting || 'Hello';
+return \`\${greet}, \${name}! Welcome to Agent Groq! 🎉\`;`
+      },
+      dice: {
+        name: 'roll_dice',
+        description: 'Rolls dice with specified number of sides',
+        parameters: [
+          { name: 'sides', type: 'number', description: 'Number of sides on the die', required: true },
+          { name: 'count', type: 'number', description: 'Number of dice to roll', required: false }
+        ],
+        code: `const numDice = count || 1;
+const results = [];
+for (let i = 0; i < numDice; i++) {
+  results.push(Math.floor(Math.random() * sides) + 1);
+}
+const total = results.reduce((a, b) => a + b, 0);
+return \`Rolled \${numDice}d\${sides}: [\${results.join(', ')}] = \${total}\`;`
+      },
+      counter: {
+        name: 'count_chars',
+        description: 'Counts characters, words, and lines in text',
+        parameters: [
+          { name: 'text', type: 'string', description: 'The text to analyze', required: true }
+        ],
+        code: `const chars = text.length;
+const words = text.split(/\\s+/).filter(Boolean).length;
+const lines = text.split('\\n').length;
+return \`Characters: \${chars}, Words: \${words}, Lines: \${lines}\`;`
+      },
+      uuid: {
+        name: 'generate_uuid',
+        description: 'Generates a random UUID v4',
+        parameters: [],
+        code: `return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+  const r = Math.random() * 16 | 0;
+  const v = c === 'x' ? r : (r & 0x3 | 0x8);
+  return v.toString(16);
+});`
+      },
+      transformer: {
+        name: 'transform_data',
+        description: 'Transforms data using a custom JavaScript expression. The expression receives the data as "x".',
+        parameters: [
+          { name: 'data', type: 'string', description: 'The data to transform', required: true },
+          { name: 'expression', type: 'code', description: 'JS expression to apply (use x for input), e.g., x.toUpperCase() or x.split(",").length', required: true }
+        ],
+        code: `try {
+  const result = transform(data, expression);
+  return \`Result: \${JSON.stringify(result)}\`;
+} catch (e) {
+  return \`Error: \${e.message}\`;
+}`
+      },
+      array_processor: {
+        name: 'process_array',
+        description: 'Processes an array with map/filter/reduce operations using custom JavaScript code',
+        parameters: [
+          { name: 'items', type: 'array', description: 'Array of items to process', required: true },
+          { name: 'operation', type: 'string', description: 'Operation: map, filter, or reduce', required: true },
+          { name: 'code', type: 'code', description: 'JS code for the operation (x=item, i=index)', required: true }
+        ],
+        code: `try {
+  let result;
+  if (operation === 'map') {
+    result = mapWith(items, code);
+  } else if (operation === 'filter') {
+    result = filterWith(items, code);
+  } else if (operation === 'reduce') {
+    const fn = new Function('acc', 'x', 'i', \`return (\${code})\`);
+    result = items.reduce((acc, x, i) => fn(acc, x, i), items[0]);
+  } else {
+    return 'Unknown operation. Use: map, filter, or reduce';
+  }
+  return \`Result: \${JSON.stringify(result)}\`;
+} catch (e) {
+  return \`Error: \${e.message}\`;
+}`
+      }
+    };
+
+    function loadTemplate(name) {
+      const t = templates[name];
+      if (!t) return;
+      
+      document.getElementById('toolName').value = t.name;
+      document.getElementById('toolDescription').value = t.description;
+      document.getElementById('toolCode').value = t.code;
+      document.getElementById('parametersContainer').innerHTML = '';
+      parameterCount = 0;
+      
+      t.parameters.forEach(p => {
+        addParameter();
+        const lastParam = document.getElementById(`param_${parameterCount}`);
+        lastParam.querySelector('[data-param-name]').value = p.name;
+        lastParam.querySelector('[data-param-type]').value = p.type;
+        lastParam.querySelector('[data-param-desc]').value = p.description || '';
+        lastParam.querySelector('[data-param-required]').checked = p.required;
+      });
+    }
+
+    // Initialize
+    init();
+  </script>
+</body>
+</html>
