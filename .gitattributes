@@ -1,10 +1,14 @@
 # Language detection for GitHub
 *.js linguist-language=JavaScript
-*.html linguist-language=HTML
 *.json linguist-language=JSON
 *.md linguist-language=Markdown
 
-# Exclude from language stats (if needed)
-# public/index.html linguist-vendored
-# node_modules/ linguist-vendored
+# Exclude large HTML file from language statistics
+# This ensures JavaScript is the primary language
+public/index.html linguist-vendored
+public/*.html linguist-vendored
+
+# Exclude dependencies
+node_modules/ linguist-vendored
+package-lock.json linguist-vendored
 
