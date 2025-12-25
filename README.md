@@ -479,3 +479,6 @@ MIT License
 
 See [LICENSE](LICENSE) for details.
 
+## Contributing
+
+Contributions are welcome! Please open an issue or submit a pull request.
