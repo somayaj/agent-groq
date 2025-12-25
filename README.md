@@ -477,7 +477,5 @@ PUT /api/guardrails
 
 MIT License
 
-Copyright (c) 2025 Asha Somayajula
-
 See [LICENSE](LICENSE) for details.
 
