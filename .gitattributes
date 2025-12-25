@@ -1,0 +1,10 @@
+# Language detection for GitHub
+*.js linguist-language=JavaScript
+*.html linguist-language=HTML
+*.json linguist-language=JSON
+*.md linguist-language=Markdown
+
+# Exclude from language stats (if needed)
+# public/index.html linguist-vendored
+# node_modules/ linguist-vendored
+
