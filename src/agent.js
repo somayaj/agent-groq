@@ -2,6 +2,7 @@ import { ChatGroq } from "@langchain/groq";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { HumanMessage } from "@langchain/core/messages";
 import { allTools } from "./tools/index.js";
+import { Guardrails, defaultGuardrails } from "./guardrails.js";
 
 /**
  * Create a LangChain ReAct Agent powered by Groq
@@ -41,6 +42,8 @@ export class Agent {
   constructor(options = {}) {
     this.agent = createAgent(options);
     this.conversationHistory = [];
+    this.guardrails = options.guardrails || defaultGuardrails;
+    this.sessionId = options.sessionId || "default";
   }
 
   /**
@@ -48,6 +51,22 @@ export class Agent {
    */
   async chat(message) {
     try {
+      // Guardrails: Rate limiting
+      const rateLimitCheck = this.guardrails.checkRateLimit(this.sessionId);
+      if (!rateLimitCheck.allowed) {
+        throw new Error(rateLimitCheck.reason);
+      }
+
+      // Guardrails: Input validation
+      const inputValidation = this.guardrails.validateContent(message, 'input');
+      if (!inputValidation.valid) {
+        throw new Error(`Input blocked: ${inputValidation.violations.join(', ')}`);
+      }
+
+      // Validate tool usage before execution
+      const toolCalls = [];
+      const toolValidationErrors = [];
+      
       const result = await this.agent.invoke({
         messages: [new HumanMessage(message)],
       });
@@ -56,6 +75,38 @@ export class Agent {
       const messages = result.messages;
       const lastMessage = messages[messages.length - 1];
 
+      // Validate tool calls
+      for (const msg of messages) {
+        if (msg.tool_calls && msg.tool_calls.length > 0) {
+          for (const toolCall of msg.tool_calls) {
+            const toolValidation = this.guardrails.validateTool(toolCall.name);
+            if (!toolValidation.allowed) {
+              toolValidationErrors.push(toolValidation.reason);
+            } else {
+              toolCalls.push(toolCall);
+            }
+          }
+        }
+      }
+
+      if (toolValidationErrors.length > 0) {
+        throw new Error(`Tool usage blocked: ${toolValidationErrors.join(', ')}`);
+      }
+
+      // Guardrails: Output validation
+      let response = lastMessage.content;
+      const outputValidation = this.guardrails.validateContent(response, 'output');
+      if (!outputValidation.valid) {
+        // Sanitize or block response
+        response = this.guardrails.sanitizeOutput(response);
+        if (outputValidation.violations.some(v => v.includes('harmful') || v.includes('sensitive'))) {
+          response = "I cannot provide that response due to content policy restrictions.";
+        }
+      } else {
+        // Sanitize even if valid (remove PII, etc.)
+        response = this.guardrails.sanitizeOutput(response);
+      }
+
       // Store in history
       this.conversationHistory.push({
         role: "user",
@@ -63,12 +114,17 @@ export class Agent {
       });
       this.conversationHistory.push({
         role: "assistant",
-        content: lastMessage.content,
+        content: response,
       });
 
       return {
-        response: lastMessage.content,
+        response: response,
         messages: messages,
+        guardrails: {
+          inputValidated: inputValidation.valid,
+          outputValidated: outputValidation.valid,
+          violations: outputValidation.violations,
+        },
       };
     } catch (error) {
       throw new Error(`Agent error: ${error.message}`);

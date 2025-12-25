@@ -371,6 +371,108 @@ const agent = new Agent({
 | `mixtral-8x7b-32768` | ⚡⚡ | 🧠🧠 | Long context |
 | `gemma2-9b-it` | ⚡⚡ | 🧠 | Lightweight tasks |
 
+## Guardrails & Policies 🔒
+
+Agent Groq includes a comprehensive guardrails system to ensure safe and responsible AI usage.
+
+### Features
+
+- ✅ **Content Filtering** - Blocks harmful, sensitive, or inappropriate content
+- ✅ **Rate Limiting** - Prevents abuse with per-session rate limits
+- ✅ **Tool Restrictions** - Control which tools can be used
+- ✅ **PII Protection** - Automatically redacts personal information
+- ✅ **Output Validation** - Validates and sanitizes LLM responses
+- ✅ **Custom Policies** - Configure policies per session
+
+### Default Policies
+
+```javascript
+{
+  blockHarmfulContent: true,      // Block violence, self-harm, etc.
+  blockSensitiveTopics: true,      // Block sensitive information
+  blockPII: true,                  // Redact personal information
+  maxRequestsPerMinute: 60,        // Rate limiting
+  maxResponseLength: 10000,        // Response size limit
+  allowedTools: null,              // null = all allowed
+  blockedTools: [],                // List of blocked tools
+}
+```
+
+### Usage
+
+```javascript
+import { Agent, createGuardrails } from "agent-groq";
+
+// Create custom guardrails
+const guardrails = createGuardrails({
+  blockHarmfulContent: true,
+  maxRequestsPerMinute: 30,
+  blockedTools: ["calculator"], // Block specific tools
+});
+
+// Use with agent
+const agent = new Agent({
+  guardrails: guardrails,
+  sessionId: "my-session",
+});
+
+// Guardrails automatically validate:
+// - Input messages
+// - Tool usage
+// - Output responses
+```
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/guardrails` | GET | Get current policies |
+| `/api/guardrails` | PUT | Update policies |
+| `/api/guardrails/validate` | POST | Validate content |
+| `/api/guardrails/rate-limit` | GET | Check rate limit status |
+
+### Policy Configuration
+
+```javascript
+// Update policies via API
+PUT /api/guardrails
+{
+  "sessionId": "my-session",
+  "policies": {
+    "blockHarmfulContent": true,
+    "maxRequestsPerMinute": 30,
+    "blockedTools": ["calculator"],
+    "customFilters": [
+      (content, type) => {
+        if (content.includes("blocked-word")) {
+          return { valid: false, reason: "Contains blocked word" };
+        }
+        return { valid: true };
+      }
+    ]
+  }
+}
+```
+
+### What Gets Blocked
+
+**Harmful Content:**
+- Violence, threats, self-harm
+- Illegal activities
+- Hate speech
+- Explicit content
+
+**Sensitive Topics:**
+- Classified information
+- API keys, passwords
+- Personal data
+
+**PII (Personal Identifiable Information):**
+- Social Security Numbers
+- Credit card numbers
+- Email addresses
+- Phone numbers
+
 ## License
 
 MIT License

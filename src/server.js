@@ -8,6 +8,7 @@ import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import { Agent } from "./agent.js";
 import { allTools } from "./tools/index.js";
+import { Guardrails, createGuardrails } from "./guardrails.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -34,6 +35,18 @@ const agents = new Map();
 
 // Store custom tools by session
 const customTools = new Map();
+
+// Store guardrails by session (default guardrails for all)
+const guardrailsStore = new Map();
+
+// Default guardrails instance
+const defaultGuardrails = createGuardrails({
+  blockHarmfulContent: true,
+  blockSensitiveTopics: true,
+  blockPII: true,
+  maxRequestsPerMinute: 60,
+  maxResponseLength: 10000,
+});
 
 // Load persisted tools from disk
 function loadPersistedTools() {
@@ -322,14 +335,24 @@ function getSessionTools(sessionId) {
 }
 
 // Get or create agent for session
+function getGuardrails(sessionId) {
+  if (!guardrailsStore.has(sessionId)) {
+    guardrailsStore.set(sessionId, defaultGuardrails);
+  }
+  return guardrailsStore.get(sessionId);
+}
+
 function getAgent(sessionId, config = {}, forceRecreate = false) {
   if (forceRecreate || !agents.has(sessionId)) {
+    const guardrails = getGuardrails(sessionId);
     agents.set(
       sessionId,
       new Agent({
         model: config.model || "llama-3.1-8b-instant",
         temperature: config.temperature || 0.7,
         tools: getSessionTools(sessionId),
+        guardrails: guardrails,
+        sessionId: sessionId,
       })
     );
   }
@@ -637,6 +660,7 @@ app.post("/api/chat", async (req, res) => {
       toolResults,
       duration,
       model: config.model || "llama-3.1-8b-instant",
+      guardrails: result.guardrails || null,
     });
   } catch (error) {
     console.error("Chat error:", error);
@@ -651,6 +675,66 @@ app.post("/api/clear", (req, res) => {
   const { sessionId = "default" } = req.body;
   agents.delete(sessionId);
   res.json({ success: true });
+});
+
+// Guardrails & Policy Management
+
+// Get current policies
+app.get("/api/guardrails", (req, res) => {
+  const sessionId = req.query.sessionId || "default";
+  const guardrails = getGuardrails(sessionId);
+  res.json({
+    policies: guardrails.getPolicySummary(),
+  });
+});
+
+// Update policies
+app.put("/api/guardrails", (req, res) => {
+  const { sessionId = "default", policies = {} } = req.body;
+  
+  try {
+    // Get existing guardrails or create new
+    const existing = guardrailsStore.get(sessionId);
+    const newPolicies = existing 
+      ? { ...existing.policies, ...policies }
+      : { ...defaultGuardrails.policies, ...policies };
+    
+    const newGuardrails = createGuardrails(newPolicies);
+    guardrailsStore.set(sessionId, newGuardrails);
+    
+    // Recreate agent with new guardrails
+    agents.delete(sessionId);
+    
+    res.json({
+      success: true,
+      policies: newGuardrails.getPolicySummary(),
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Validate content (for testing)
+app.post("/api/guardrails/validate", (req, res) => {
+  const { sessionId = "default", content, type = "input" } = req.body;
+  
+  if (!content) {
+    return res.status(400).json({ error: "Content is required" });
+  }
+  
+  const guardrails = getGuardrails(sessionId);
+  const validation = guardrails.validateContent(content, type);
+  
+  res.json(validation);
+});
+
+// Check rate limit status
+app.get("/api/guardrails/rate-limit", (req, res) => {
+  const sessionId = req.query.sessionId || "default";
+  const guardrails = getGuardrails(sessionId);
+  const check = guardrails.checkRateLimit(sessionId);
+  
+  res.json(check);
 });
 
 // Serve the frontend
