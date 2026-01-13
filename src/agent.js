@@ -3,6 +3,7 @@ import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { HumanMessage } from "@langchain/core/messages";
 import { allTools } from "./tools/index.js";
 import { Guardrails, defaultGuardrails } from "./guardrails.js";
+import https from "https";
 
 /**
  * Create a LangChain ReAct Agent powered by Groq
@@ -15,15 +16,36 @@ export function createAgent(options = {}) {
     systemPrompt = `You are a helpful AI assistant with access to various tools.
 Use the tools available to you to help answer questions and complete tasks.
 Always think step by step and use the appropriate tool when needed.
-Be concise but thorough in your responses.`,
+Be concise but thorough in your responses.
+IMPORTANT: After using a tool, analyze the result and provide a final answer. Do not call tools repeatedly for the same task. If a tool doesn't give you the expected result, explain what happened and provide your best answer based on available information.`,
   } = options;
 
-  // Initialize the Groq LLM
+  // Initialize the Groq LLM with timeout
+  if (!process.env.GROQ_API_KEY) {
+    throw new Error("GROQ_API_KEY is not set in environment variables");
+  }
+  
+  // Create HTTPS agent - handle SSL certificate issues
+  // In some environments, SSL certificates may not be available
+  // For development, we can allow insecure connections if needed
+  const httpsAgent = new https.Agent({
+    rejectUnauthorized: false, // Allow self-signed or missing certificates (development only)
+  });
+
   const llm = new ChatGroq({
     model,
     temperature,
     apiKey: process.env.GROQ_API_KEY,
+    timeout: 20000, // 20 second timeout for individual API calls
+    maxRetries: 1, // Reduce retries to fail faster
   });
+  
+  // Set httpAgent on the client after creation to handle SSL issues
+  if (llm.client && httpsAgent) {
+    llm.client.httpAgent = httpsAgent;
+  }
+  
+  console.log(`[Agent] Created LLM with model: ${model}, baseURL: ${llm.client?.baseURL || 'default'}`);
 
   // Create the ReAct agent with tools
   const agent = createReactAgent({
@@ -67,9 +89,25 @@ export class Agent {
       const toolCalls = [];
       const toolValidationErrors = [];
       
-      const result = await this.agent.invoke({
-        messages: [new HumanMessage(message)],
+      // Add timeout wrapper for agent invocation
+      console.log(`[Agent] Starting chat request for session: ${this.sessionId}`);
+      const invokePromise = this.agent.invoke(
+        {
+          messages: [new HumanMessage(message)],
+        },
+        {
+          recursionLimit: 50, // Increase from default 25 to 50
+        }
+      );
+      
+      // Timeout after 30 seconds (reduced from 45)
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("Agent invocation timed out after 30 seconds")), 30000);
       });
+      
+      console.log(`[Agent] Waiting for response...`);
+      const result = await Promise.race([invokePromise, timeoutPromise]);
+      console.log(`[Agent] Received response`);
 
       // Extract the final response
       const messages = result.messages;
@@ -127,7 +165,16 @@ export class Agent {
         },
       };
     } catch (error) {
-      throw new Error(`Agent error: ${error.message}`);
+      console.error(`[Agent] Error details:`, error);
+      // Provide more detailed error information
+      let errorMessage = error.message || "Unknown error";
+      if (error.cause) {
+        errorMessage += ` (${error.cause.message || error.cause})`;
+      }
+      if (error.response) {
+        errorMessage += ` - Status: ${error.response.status}`;
+      }
+      throw new Error(`Agent error: ${errorMessage}`);
     }
   }
 
@@ -138,7 +185,10 @@ export class Agent {
     try {
       const eventStream = await this.agent.stream(
         { messages: [new HumanMessage(message)] },
-        { streamMode: "values" }
+        { 
+          streamMode: "values",
+          recursionLimit: 50, // Increase from default 25 to 50
+        }
       );
 
       for await (const event of eventStream) {

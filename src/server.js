@@ -614,6 +614,16 @@ app.delete("/api/tools/:name", (req, res) => {
   res.json({ success: true });
 });
 
+// Helper function to add timeout to promises
+function withTimeout(promise, timeoutMs = 60000) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`Request timed out after ${timeoutMs}ms`)), timeoutMs)
+    ),
+  ]);
+}
+
 // Chat endpoint
 app.post("/api/chat", async (req, res) => {
   const { message, sessionId = "default", config = {} } = req.body;
@@ -632,7 +642,8 @@ app.post("/api/chat", async (req, res) => {
     const agent = getAgent(sessionId, config, forceRecreate);
     const startTime = Date.now();
 
-    const result = await agent.chat(message);
+    // Add 60 second timeout to prevent hanging
+    const result = await withTimeout(agent.chat(message), 60000);
     const duration = Date.now() - startTime;
 
     // Extract tool calls from messages
@@ -664,9 +675,65 @@ app.post("/api/chat", async (req, res) => {
     });
   } catch (error) {
     console.error("Chat error:", error);
+    console.error("Error stack:", error.stack);
     res.status(500).json({
       error: error.message || "An error occurred",
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined,
     });
+  }
+});
+
+// Streaming chat endpoint for real-time responses
+app.post("/api/chat/stream", async (req, res) => {
+  const { message, sessionId = "default", config = {} } = req.body;
+
+  if (!message) {
+    return res.status(400).json({ error: "Message is required" });
+  }
+
+  if (!process.env.GROQ_API_KEY) {
+    return res.status(500).json({ error: "GROQ_API_KEY not configured" });
+  }
+
+  // Set up Server-Sent Events
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+
+  try {
+    const forceRecreate = config.model || config.temperature !== undefined;
+    const agent = getAgent(sessionId, config, forceRecreate);
+    const startTime = Date.now();
+
+    let fullResponse = "";
+    const toolCalls = [];
+    const toolResults = [];
+
+    // Stream with timeout
+    const streamPromise = (async () => {
+      for await (const chunk of agent.stream(message)) {
+        if (chunk.content) {
+          fullResponse += chunk.content;
+          res.write(`data: ${JSON.stringify({ type: "content", content: chunk.content })}\n\n`);
+        }
+        if (chunk.toolCalls && chunk.toolCalls.length > 0) {
+          for (const toolCall of chunk.toolCalls) {
+            toolCalls.push(toolCall);
+            res.write(`data: ${JSON.stringify({ type: "tool_call", toolCall })}\n\n`);
+          }
+        }
+      }
+    })();
+
+    await withTimeout(streamPromise, 60000);
+
+    const duration = Date.now() - startTime;
+    res.write(`data: ${JSON.stringify({ type: "done", duration, model: config.model || "llama-3.1-8b-instant" })}\n\n`);
+    res.end();
+  } catch (error) {
+    console.error("Stream error:", error);
+    res.write(`data: ${JSON.stringify({ type: "error", error: error.message })}\n\n`);
+    res.end();
   }
 });
 
